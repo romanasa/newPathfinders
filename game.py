@@ -1,26 +1,40 @@
+import threading
+import copy
+
 class Playfield(object):
     FREE = 0
     WALL = 1
-    POINT = 2
+
+    class PlayfieldError(Exception):
+        pass
+
     def __init__(self, map, width, heigth):
         self.map = map
         self.width = width
         self.heigth = heigth
         self.points = []
-        self.num_points = 0
 
     def add_point(self, x, y):
-        self.map[x][y] = self.POINT
-        self.num_points += 1
+        if not self.is_free(x, y) or self.is_point(x, y):
+            raise self.PlayfieldError("Can not add point ({0}, {1})".format(x, y))
+        self.points.append((x,y))
 
     def del_point(self, x, y):
-        self.map[x][y] = self.FREE
-        self.num_points =- 1
+        if self.is_point(x, y):
+            self.points.remove((x, y))
+        else:
+            raise self.PlayfieldError("Can not remove point ({0}, {1})".format(x, y))
 
     def is_point(self, x, y):
-        return self.map[x][y] == self.POINT
+        if not self.is_into(x, y):
+            raise self.PlayfieldError("({0}, {1}) is out of field".format(x, y))
+
+        return self.points.index((x, y)) != -1
 
     def is_free(self, x, y):
+        if not self.is_into(x, y):
+            raise self.PlayfieldError("({0}, {1}) is out of field".format(x, y))
+
         return self.map[x][y] != self.WALL
 
     def is_into(self, x, y):
@@ -28,9 +42,10 @@ class Playfield(object):
 
 
 class Gameinfo(object):
-    def __init__(self, map):
+    def __init__(self, map, points):
         self.map = map
         self.players = []
+        self.points = copy.deepcopy(points)
 
     def add_player_info(self, p):
         self.players.append((p.x, p.y))
@@ -56,16 +71,19 @@ class Game(object):
     LEFT = 2
     RIGHT = 3
 
+
     def __init__(self, playground, queue=None):
         self.playground = playground
         self.players = {}
         self.queue = queue
+        self.game_thread = threading.Thread(target=self._game())
+        self.lock = threading.Lock()
 
     def add_player(self, player):
         self.players[player.name] = player
 
     def do_player_move(self, player):
-        info = Gameinfo(self.playground.map)
+        info = Gameinfo(self.playground.map, self.playground.points)
         for p in self.players.values():
             info.add_player_info(p)
 
@@ -87,21 +105,36 @@ class Game(object):
         if not self.playground.is_free(x,y) or not self.playground.is_into(x,y):
             return
 
+        self.lock.acqure()
         if self.playground.is_point(x, y):
             self.playground.del_point(x, y)
             player.score =+ 1
 
         player.x, player.y = x, y
-
+        self.lock.release()
 
     def do_move(self):
         for n, p in self.players:
             self.do_player_move(p)
 
-    def run(self):
+    def start_game(self):
+        self.game_thread.start()
+
+    def _game(self):
         points = self.playground.num_points
 
         while True:
             self.do_move()
             if self.playground.num_points == 0:
                 break
+
+    def is_going(self):
+        return self.game_thread.is_alive()
+
+    def game_info(self):
+        self.lock.acqure()
+        info = Gameinfo(self.playground.map, self.playground.points)
+        for p in self.players.values():
+            info.add_player_info(p)
+        self.lock.release()
+        return info
