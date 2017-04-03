@@ -3,6 +3,7 @@
 from flask import Flask
 import game
 from flask import jsonify, redirect, url_for, render_template, request, make_response
+import random
 
 
 app = Flask(__name__)
@@ -19,20 +20,38 @@ maze = [
 [0,1,0,0,0,0,0,0,0,0],
 [0,0,0,0,0,0,0,0,0,0]
 ]
-def f1(info):
-    return 2
 
-def f2(info):
+
+def f1(map, points, x, y, players, ctx):
+    height = len(map)
+    width = len(map[0])
+
+    def is_into(x, y):
+        return 0 <= x < width and 0 <= y < height
+
+    def is_free(x, y):
+        if not is_into(x, y):
+            return False
+
+        return map[y][x] != 1
+    moves = [(0, -1), (0, 1), (-1 , 0), (1, 0)]
+
+    while True:
+        move = random.randint(0, 3)
+        if is_free(x+moves[move][0], y+moves[move][1]):
+            return move
+
+def f2(map, points, x, y, players, ctx):
     return 0
 
 
-playground = game.Playfield(maze, 10, 10)
+playground = game.Playground(maze)
 playground.points.append((0,3))
 playground.points.append((5,4))
 playground.points.append((6,6))
 pf = game.Game(playground)
 p1 = game.Player("Masha", f1, 8, 4)
-p2 = game.Player("Gosha", f2, 3, 7)
+p2 = game.Player("Gosha", f1, 3, 7)
 pf.add_player(p1)
 pf.add_player(p2)
 
