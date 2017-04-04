@@ -2,15 +2,15 @@ function gridprepare(data) {
 	var new_data = new Array();
 	var xpos = 1; //starting xpos and ypos at 1 so the stroke will show when we make the grid below
 	var ypos = 1;
-	var width = 50;
-	var height = 50;
+	var width = config.field;
+	var height = config.field;
 
 	// iterate for rows
-	for (var row = 0; row < 10; row++) {
+	for (var row = 0; row < config.height; row++) {
 		new_data.push( new Array() );
 
 		// iterate for cells/columns inside rows
-		for (var column = 0; column < 10; column++) {
+		for (var column = 0; column < config.width; column++) {
 			new_data[row].push({
 				x: xpos,
 				y: ypos,
@@ -32,8 +32,8 @@ function gridprepare(data) {
 // Draw maze
 var grid = d3.select("#grid")
 	.append("svg")
-	.attr("width","510px")
-	.attr("height","510px");
+	.attr("width", config.width_px + "px")
+	.attr("height",config.height_px + "px");
 
 function draw_maze(maze_data) {
     var raw = grid.selectAll(".row")
@@ -73,9 +73,9 @@ function draw_points(points_data) {
              .attr("class", "point");
 
     points.append("circle")
-          .attr("cx", function(d) { return d.x * 50 + 25})
-          .attr("cy", function(d) { return d.y * 50 + 25})
-          .attr("r", "20")
+          .attr("cx", function(d) { return d.x * config.field + config.field/2 + 1})
+          .attr("cy", function(d) { return d.y * config.field + config.field/2 + 1})
+          .attr("r", config.field/3)
           .attr("fill", "orange");
 }
 
@@ -95,23 +95,23 @@ function draw_players(players_data) {
               .attr("class", "player");
 
     players.append("rect")
-           .attr("x", function(d) { return d.x * 50 + 6; })
-	       .attr("y", function(d) { return d.y * 50 + 6; })
-	       .attr("width", "40")
-	       .attr("height", "40")
+           .attr("x", function(d) { return d.x * config.field + config.field/10 + 1 })
+	       .attr("y", function(d) { return d.y * config.field + config.field/10 + 1 })
+	       .attr("width", config.field - 2*config.field/10)
+	       .attr("height", config.field - 2*config.field/10)
 	       .style("fill", function(d, i) { return pallete[i] })
 	       .style("stroke", "#222");
 
     players.append("circle")
-           .attr("cx", function(d) { return d.x * 50 + 16})
-           .attr("cy", function(d) { return d.y * 50 + 21})
-           .attr("r", "7")
+           .attr("cx", function(d) { return d.x * config.field + 3 * config.field/10 + 1 })
+           .attr("cy", function(d) { return d.y * config.field + 3 * config.field/10 + 1 })
+           .attr("r", config.field/6)
            .attr("fill", "#222");
 
     players.append("circle")
-           .attr("cx", function(d) { return d.x * 50 + 36})
-           .attr("cy", function(d) { return d.y * 50 + 21})
-           .attr("r", "7")
+           .attr("cx", function(d) { return d.x * config.field + 7 * config.field/10 + 1 })
+           .attr("cy", function(d) { return d.y * config.field + 3 * config.field/10 + 1 })
+           .attr("r", config.field/6)
            .attr("fill", "#222");
 }
 
