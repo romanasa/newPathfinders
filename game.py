@@ -2,6 +2,8 @@ import threading
 import copy
 import time
 
+import multiprocessing as mp
+
 UP = 0
 DOWN = 1
 LEFT = 2
@@ -13,7 +15,7 @@ WALL = 1
 # Game state
 STOPPED = 0
 STARTED = 1
-ENDED = 2
+GAMEOVER = 2
 
 
 class GameError(Exception):
@@ -47,7 +49,7 @@ class Playground(object):
     def add_point(self, x, y):
         if not self.is_free(x, y) or self.is_point(x, y):
             raise self.PlaygroundError("Can not add point ({0}, {1})".format(x, y))
-        self.points.append((x,y))
+        self.points.append((x, y))
 
     def del_point(self, x, y):
         if self.is_point(x, y):
@@ -71,43 +73,102 @@ class Playground(object):
         return 0 <= x < self.width and 0 <= y <= self.height
 
 
-class Gameinfo(object):
-    def __init__(self, map, points):
-        self.map = map
-        self.players = {}
-        self.points = copy.deepcopy(points)
-        self.x = None
-        self.y = None
-
-    def add_player_info(self, name, p):
-        self.players[name] = (p.x, p.y)
+class PlayerInfo(object):
+    def __init__(self, player):
+        self.name = player.name
+        self.score = player.score
+        self.x = player.x
+        self.y = player.y
 
 
 class Player(object):
-    def __init__(self, name, move_func, x = 0, y = 0):
+    def __init__(self, name, move_func, x=0, y=0):
         self.name = name
         self.score = 0
         self.move_func = move_func
         # Function for move:
-        # move_function(map, points, x, y, players, ctx = None)
+        # move_function(info, ctx = None)
         self.x = x
         self.y = y
 
         # Save history of all moves
         self.history = []
-        self.history.append((x,y))
+        self.history.append((x, y))
 
-    def move(self, map, points, x, y, players, ctx=None):
-        return self.move_func(map, points, x, y, players, ctx)
+        self.game_pipe, self.player_pipe = mp.Pipe()
+        self.process = None
+
+        # Are there any pending move requests
+        self.move_in_progress = False
+
+    def start_player(self):
+        self.process = mp.Process(target=self.move_processor)
+        self.process.start()
+
+    def stop_player(self, timeout=5):
+        if self.process and self.process.is_alive():
+            # Try to terminate process normally
+            self.game_pipe.send(None)
+            self.process.join(timeout)
+
+            # Send SIGTERM to the process
+            if self.process.is_alive():
+                self.process.terminate()
+                self.process.join(timeout)
+
+    def move_processor(self):
+        print "Process '{}' started".format(self.name)
+        while True:
+            try:
+                request = self.player_pipe.recv()
+            except Exception as e:
+                print "ERROR. Process '{}' on pipe receive. {}.".format(self.name, e)
+                break
+
+            if request is None:
+                break
+
+            try:
+                response = self.move_func(request)
+            except Exception as e:
+                print "ERROR. Process '{}' on move function. {}.".format(self.name, e)
+                break
+
+            try:
+                self.player_pipe.send(response)
+            except Exception as e:
+                print "ERROR. Process '{}' on pipe send. {}.".format(self.name, e)
+                break
+
+        print "Process {} stopped".format(self.name)
+
+    def move_request(self, gameinfo):
+        if self.move_in_progress:
+            return
+
+        self.game_pipe.send(gameinfo)
+        self.move_in_progress = True
+
+    def move_result(self):
+        if self.move_in_progress:
+            if self.game_pipe.poll():
+                self.move_in_progress = False
+                return self.game_pipe.recv()
+
+        return None
 
 
 class Game(object):
-    def __init__(self, playground):
+    def __init__(self, playground, max_move, movetime=1):
         self.state = STOPPED
         self.playground = playground
+        self.movetime = movetime
+        self.max_move = max_move
+        self.n_move = 0
         self.players = {}
         self.lock = threading.Lock()
         self.game_thread = threading.Thread(target=self._game)
+        self.stop = False
 
     def add_player(self, player):
         if self.state == STOPPED:
@@ -115,14 +176,9 @@ class Game(object):
         else:
             raise GameError("Can not add player. Game not in STOPPED state")
 
-    def do_player_move(self, player):
+    def do_player_move(self, player, move):
         x = player.x
         y = player.y
-        map = copy.deepcopy(self.playground.map)
-        points = copy.deepcopy(self.playground.points)
-        players = [(p.x, p.y) for n, p in self.players.items() if n != player.name]
-
-        move = player.move(map, points, x, y, players)
 
         if move == UP:
             y -= 1
@@ -130,51 +186,81 @@ class Game(object):
             y += 1
         elif move == LEFT:
             x -= 1
-        elif move == RIGHT :
+        elif move == RIGHT:
             x += 1
         else:
             return
 
         self.lock.acquire()
-        if self.playground.is_free(x,y):
+        if self.playground.is_free(x, y):
+            player.x, player.y = x, y
             if self.playground.is_point(x, y):
                 self.playground.del_point(x, y)
                 player.score += 1
 
-            player.x, player.y = x, y
-
-        player.history.append((x,y))
+        player.history.append((x, y))
         self.lock.release()
 
     def do_move(self):
-        time.sleep(0.1)
-        for n, p in self.players.items():
-            self.do_player_move(p)
+        self.n_move += 1
+
+        for player in self.players.values():
+            info = self.player_info(player.name)
+            player.move_request(info)
+
+        time.sleep(self.movetime)
+
+        for player in self.players.values():
+            move = player.move_result()
+            if move is not None:
+                self.do_player_move(player, move)
 
     def start_game(self):
-       self.game_thread.start()
+        for player in self.players.values():
+            player.start_player()
+        self.game_thread.start()
+        self.state = STARTED
+
+    def stop_game(self):
+        # Stop game thread
+        self.stop = True
+        self.game_thread.join()
+
+        # Stop all players
+        for player in self.players.values():
+            player.stop_player()
 
     def _game(self):
-        points = len(self.playground.points)
-
         while True:
             self.do_move()
-            if len(self.playground.points) == 0:
+            if self.is_gameover():
                 break
+
+    def is_gameover(self):
+        if len(self.playground.points) == 0 or self.n_move >= self.max_move or self.stop:
+            return True
+        return False
 
     def is_going(self):
         return self.game_thread.is_alive()
 
-    def game_info(self):
-        self.lock.acquire()
-        info = Gameinfo(self.playground.map, self.playground.points)
-        for p_name, p in self.players.items():
-            info.add_player_info(p_name, p)
-        self.lock.release()
+    def player_info(self, player_name):
+        info = dict()
+        info["map"] = copy.deepcopy(self.playground.map)
+        info["coins"] = copy.deepcopy(self.playground.points)
+        info["players"] = [(p.x, p.y) for p in self.players.values() if p.name != player_name]
+        info["x"] = self.players[player_name].x
+        info["y"] = self.players[player_name].y
         return info
+
+    def get_points(self):
+        self.lock.acquire()
+        points = copy.deepcopy(self.playground.points)
+        self.lock.release()
+        return points
 
     def get_players(self):
         self.lock.acquire()
-        players = copy.deepcopy(self.players)
+        players = [PlayerInfo(p) for p in self.players.values()]
         self.lock.release()
         return players
