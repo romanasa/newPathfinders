@@ -1,0 +1,9 @@
+[pathfinders]
+map_file: maps/map2
+move_timeout: 0.1
+players_dir: players
+num_coins: 60
+max_moves: 10000
+
+[web]
+field_size: 14

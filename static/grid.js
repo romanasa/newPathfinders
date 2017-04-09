@@ -80,7 +80,7 @@ function draw_points(points_data) {
 }
 
 // Draw players on playboard.
-pallete = ["green", "red", "blue", "yellow", "magenta", "white"]
+pallete = ["green", "red", "blue", "magenta", "orange", "brown", "cyan"]
 players = null;
 
 function draw_players(players_data) {
@@ -116,9 +116,7 @@ function draw_players(players_data) {
 }
 
 // Write score table
-
-
-columns = ["name", "score"];
+columns = ["name", "score", "timeout"];
 var table = d3.select('#scores').append('table');
 var thead = table.append('thead');
 var	tbody = table.append('tbody');
@@ -152,6 +150,13 @@ function print_scores(points_data) {
 }
 
 
+var gameinfo = d3.select('#info').append('p');
+
+function print_gameinfo(info) {
+    gameinfo.text("Move: " + info.move + "   Max move: " + info.max_move);
+}
+
+
 //Refresh points and players positions peridically
 function refresh_game() {
     d3.json("/v1/api/players", function (json) {
@@ -160,6 +165,9 @@ function refresh_game() {
     });
     d3.json("/v1/api/points", function (json) {
         draw_points(json.points);
+    });
+    d3.json("/v1/api/game", function (json) {
+        print_gameinfo(json.game);
     });
     setTimeout(refresh_game, 100);
 }

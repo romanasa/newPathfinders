@@ -30,9 +30,6 @@ class Playground(object):
     FREE = 0
     WALL = 1
 
-    class PlaygroundError(Exception):
-        pass
-
     def __init__(self, map):
         if len(map) == 0:
             raise PlaygroundError("Map has not rows")
@@ -48,14 +45,14 @@ class Playground(object):
 
     def add_point(self, x, y):
         if not self.is_free(x, y) or self.is_point(x, y):
-            raise self.PlaygroundError("Can not add point ({0}, {1})".format(x, y))
+            raise PlaygroundError("Can not add point ({0}, {1})".format(x, y))
         self.points.append((x, y))
 
     def del_point(self, x, y):
         if self.is_point(x, y):
             self.points.remove((x, y))
         else:
-            raise self.PlaygroundError("Can not remove point ({0}, {1})".format(x, y))
+            raise PlaygroundError("Can not remove point ({0}, {1})".format(x, y))
 
     def is_point(self, x, y):
         if not self.is_into(x, y):
@@ -79,12 +76,14 @@ class PlayerInfo(object):
         self.score = player.score
         self.x = player.x
         self.y = player.y
+        self.timeout = player.timeout
 
 
 class Player(object):
     def __init__(self, name, move_func, x=0, y=0):
         self.name = name
         self.score = 0
+        self.timeout = 0
         self.move_func = move_func
         # Function for move:
         # move_function(info, ctx = None)
@@ -100,6 +99,13 @@ class Player(object):
 
         # Are there any pending move requests
         self.move_in_progress = False
+
+    def set_position(self, x, y):
+        self.x = x
+        self.y = y
+
+    def get_position(self):
+        return (self.x, self.y)
 
     def start_player(self):
         self.process = mp.Process(target=self.move_processor)
@@ -118,6 +124,7 @@ class Player(object):
 
     def move_processor(self):
         print "Process '{}' started".format(self.name)
+        self.ctx = {}
         while True:
             try:
                 request = self.player_pipe.recv()
@@ -129,7 +136,7 @@ class Player(object):
                 break
 
             try:
-                response = self.move_func(request)
+                response = self.move_func(request, self.ctx)
             except Exception as e:
                 print "ERROR. Process '{}' on move function. {}.".format(self.name, e)
                 break
@@ -144,6 +151,7 @@ class Player(object):
 
     def move_request(self, gameinfo):
         if self.move_in_progress:
+            self.timeout += 1
             return
 
         self.game_pipe.send(gameinfo)
@@ -177,8 +185,7 @@ class Game(object):
             raise GameError("Can not add player. Game not in STOPPED state")
 
     def do_player_move(self, player, move):
-        x = player.x
-        y = player.y
+        x, y = player.get_position()
 
         if move == UP:
             y -= 1
@@ -193,7 +200,7 @@ class Game(object):
 
         self.lock.acquire()
         if self.playground.is_free(x, y):
-            player.x, player.y = x, y
+            player.set_position(x, y)
             if self.playground.is_point(x, y):
                 self.playground.del_point(x, y)
                 player.score += 1
@@ -234,6 +241,7 @@ class Game(object):
         while True:
             self.do_move()
             if self.is_gameover():
+                self.state = GAMEOVER
                 break
 
     def is_gameover(self):
@@ -264,3 +272,10 @@ class Game(object):
         players = [PlayerInfo(p) for p in self.players.values()]
         self.lock.release()
         return players
+
+    def get_gameinfo(self):
+        info = {
+            "move": self.n_move,
+            "max_move": self.max_move
+        }
+        return info
