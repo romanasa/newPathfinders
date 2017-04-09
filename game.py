@@ -67,7 +67,7 @@ class Playground(object):
         return self.map[y][x] != WALL
 
     def is_into(self, x, y):
-        return 0 <= x < self.width and 0 <= y <= self.height
+        return 0 <= x < self.width and 0 <= y < self.height
 
 
 class PlayerInfo(object):

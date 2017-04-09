@@ -1,8 +1,8 @@
 [pathfinders]
-map_file: maps/map2
+map_file: maps/map1
 move_timeout: 0.1
 players_dir: players
-num_coins: 60
+num_coins: 6
 max_moves: 10000
 
 [web]

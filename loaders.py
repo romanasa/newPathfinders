@@ -33,7 +33,7 @@ class GameLoader(object):
         self.max_moves = c_parser.getint(self.game_section, "max_moves")
 
         if not c_parser.has_section(self.web_section):
-            raise LoadError("Config file has not got {} section".format(self.game_section))
+            raise LoadError("Config file has not got '{}' section".format(self.game_section))
 
         self.field_size = c_parser.getint(self.web_section, "field_size")
 
@@ -77,7 +77,7 @@ class GameLoader(object):
             p = imp.load_module(name, fp, pathname, description)
             move_function = p.move  # Get module classes from imported modules
         except Exception as e:
-            raise LoadError("Error loading player {}: {}".format(name, e))
+            raise LoadError("Error loading player '{}': {}".format(name, e))
 
         return game.Player(name, move_function)
 
