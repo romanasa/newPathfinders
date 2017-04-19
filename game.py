@@ -185,7 +185,7 @@ class Game(object):
         else:
             raise GameError("Can not add player. Game not in STOPPED state")
 
-    def do_player_move(self, player, move):
+    def do_player_move(self, player, move, start_game=False):
         x, y = player.get_position()
 
         if move == UP:
@@ -196,7 +196,7 @@ class Game(object):
             x -= 1
         elif move == RIGHT:
             x += 1
-        else:
+        elif not start_game:
             return
 
         self.lock.acquire()
@@ -206,7 +206,8 @@ class Game(object):
                 self.playground.del_point(x, y)
                 player.score += 1
 
-        player.history.append((x, y))
+        if not start_game:
+            player.history.append((x, y))
         self.lock.release()
 
     def do_move(self):
@@ -229,6 +230,8 @@ class Game(object):
     def start_game(self):
         for player in self.players.values():
             player.start_player()
+            # Collect coins at statring game
+            self.do_player_move(player, 0, start_game=True)
         self.game_thread.start()
         self.state = STARTED
 
