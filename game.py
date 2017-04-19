@@ -1,6 +1,7 @@
 import threading
 import copy
 import time
+import random
 
 import multiprocessing as mp
 
@@ -211,13 +212,16 @@ class Game(object):
     def do_move(self):
         self.n_move += 1
 
-        for player in self.players.values():
+        l_players = self.players.values()
+        random.shuffle(l_players)
+
+        for player in l_players:
             info = self.player_info(player.name)
             player.move_request(info)
 
         time.sleep(self.movetime)
 
-        for player in self.players.values():
+        for player in l_players:
             move = player.move_result()
             if move is not None:
                 self.do_player_move(player, move)
